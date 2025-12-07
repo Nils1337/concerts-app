@@ -129,3 +129,5 @@ htmlcov/
 # Local SQLite databases
 *.db
 *.sqlite3
+
+.streamlit/secrets.toml

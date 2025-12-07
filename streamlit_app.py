@@ -2,10 +2,6 @@ import os
 import pandas as pd
 import streamlit as st
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-# --- Load environment variables ---
-load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_API_KEY"]  # sicher für private App
