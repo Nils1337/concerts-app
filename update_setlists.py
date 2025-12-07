@@ -49,48 +49,65 @@ def fetch_all_setlists():
     return results
 
 
-def upsert_setlist(setlist):
-    """Insert or update a setlist in Supabase using the client library."""
-    setlist_id = setlist.get("id")
+def upsert_setlists(setlists):
 
-    # Flattened fields
-    artist = setlist.get("artist", {}).get("name")
-    venue = setlist.get("venue", {}).get("name")
-    city = setlist.get("venue", {}).get("city", {}).get("name")
-    country = setlist.get("venue", {}).get("city", {}).get("country", {}).get("name")
-    date_str = setlist.get("eventDate")
-    url = setlist.get("url")
+    # Replace records from setlist.fm
+    for setlist in all_setlists:
+        """Replace a setlist in Supabase to keep data exactly in sync with setlist.fm."""
+        setlist_id = setlist.get("id")
 
-    try:
-        event_date = datetime.strptime(date_str, "%d-%m-%Y").date().isoformat()
-    except:
-        event_date = None
+        # Flattened fields
+        artist = setlist.get("artist", {}).get("name")
+        venue = setlist.get("venue", {}).get("name")
+        city = setlist.get("venue", {}).get("city", {}).get("name")
+        country = setlist.get("venue", {}).get("city", {}).get("country", {}).get("name")
+        date_str = setlist.get("eventDate")
+        url = setlist.get("url")
 
-    payload = {
-        "id": setlist_id,
-        "artist_name": artist,
-        "venue_name": venue,
-        "city_name": city,
-        "country_name": country,
-        "event_date": event_date,
-        "url": url,
-        "raw": setlist
-    }
+        try:
+            event_date = datetime.strptime(date_str, "%d-%m-%Y").date().isoformat()
+        except:
+            event_date = None
 
-    # Upsert with Supabase client
-    try:
-        supabase.table("Setlist").upsert(payload, on_conflict="id").execute()
-        print(f"Upserted {setlist_id}")
-    except Exception as e:
-        print(f"Exception for {setlist_id}: {e}")
+        payload = {
+            "id": setlist_id,
+            "artist_name": artist,
+            "venue_name": venue,
+            "city_name": city,
+            "country_name": country,
+            "event_date": event_date,
+            "url": url,
+            "raw": setlist
+        }
+
+        # Delete existing record and insert new one to keep data exactly in sync
+        try:
+            supabase.table("Setlist").delete().eq("id", setlist_id).execute()
+            supabase.table("Setlist").insert(payload).execute()
+            print(f"Replaced {setlist_id}")
+        except Exception as e:
+            print(f"Exception for {setlist_id}: {e}")
+    
+    # Get IDs from setlist.fm
+    setlist_fm_ids = set(s.get("id") for s in all_setlists)
+
+    # Get all IDs from Supabase
+    existing_records = supabase.table("Setlist").select("id").execute()
+    supabase_ids = set(record["id"] for record in existing_records.data)
+
+    # Delete records in Supabase that are not in setlist.fm
+    ids_to_delete = supabase_ids - setlist_fm_ids
+    for setlist_id in ids_to_delete:
+        try:
+            supabase.table("Setlist").delete().eq("id", setlist_id).execute()
+            print(f"Deleted {setlist_id}")
+        except Exception as e:
+            print(f"Exception deleting {setlist_id}: {e}")
 
 
 if __name__ == "__main__":
     print("Fetching setlists...")
     all_setlists = fetch_all_setlists()
     print(f"Found {len(all_setlists)} setlists.")
-
-    for s in all_setlists:
-        upsert_setlist(s)
-
+    upsert_setlists(all_setlists)
     print("Done.")
