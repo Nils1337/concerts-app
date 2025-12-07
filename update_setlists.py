@@ -3,6 +3,7 @@ import requests
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
+import time
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ def fetch_all_setlists():
     page = 1
 
     while True:
-        url = f"https://api.setlist.fm/rest/1.0/user/{USERNAME}/attended?page={page}"
+        url = f"https://api.setlist.fm/rest/1.0/user/{USERNAME}/attended?p={page}"
         r = requests.get(url, headers=SETLIST_HEADERS)
 
         if r.status_code != 200:
@@ -38,14 +39,12 @@ def fetch_all_setlists():
 
         results.extend(setlists)
 
-        # For testing, stop after first page
-        break
-
         # Stop when all pages are fetched
         if page >= data.get("total", 0) / data.get("itemsPerPage", 1):
             break
 
         page += 1
+        time.sleep(1)
 
     return results
 
@@ -91,7 +90,6 @@ if __name__ == "__main__":
     all_setlists = fetch_all_setlists()
     print(f"Found {len(all_setlists)} setlists.")
 
-    print(f"First setlist: {all_setlists[0]}")
     for s in all_setlists:
         upsert_setlist(s)
 
