@@ -31,9 +31,9 @@ else:
     with col1:
         st.subheader("Filter")
         artists = st.multiselect("Artist:", options=df['artist_name'].dropna().unique())
-        countries = st.multiselect("Land:", options=df['country_name'].dropna().unique())
-        cities = st.multiselect("Stadt:", options=df['city_name'].dropna().unique())
         venues = st.multiselect("Venue:", options=df['venue_name'].dropna().unique())
+        cities = st.multiselect("Stadt:", options=df['city_name'].dropna().unique())
+        countries = st.multiselect("Land:", options=df['country_name'].dropna().unique())
         
         min_year = int(df['event_date'].dt.year.min())
         max_year = int(df['event_date'].dt.year.max())
