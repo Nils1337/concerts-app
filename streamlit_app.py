@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import streamlit as st
+import altair as alt
 from supabase import create_client, Client
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -60,7 +61,7 @@ else:
         else:
             # Group by date and location, separate artists and links
             grouped_data = []
-            for (event_date, venue_name, city_name, country_name), group in filtered.groupby(['event_date', 'venue_name', 'city_name', 'country_name']):
+            for (event_date, venue_name, city_name, city_lat, city_long, country_name), group in filtered.groupby(['event_date', 'venue_name', 'city_name', 'city_lat', 'city_long', 'country_name']):
                 # Separate artist names and create links
                 artists = []
                 url = group['url'].iloc[0] if 'url' in group.columns and not group['url'].isna().all() else None
@@ -74,6 +75,8 @@ else:
                     'artists': artists,
                     'venue_name': venue_name,
                     'city_name': city_name,
+                    'city_lat': city_lat,
+                    'city_long': city_long,
                     'country_name': country_name,
                     'setlist': url
                 })
@@ -253,3 +256,74 @@ else:
             chart_data = grouped_df.groupby('year').size().reset_index(name='Anzahl Konzerte')
             st.subheader("Konzerte pro Jahr")
             st.bar_chart(chart_data.set_index('year')['Anzahl Konzerte'])
+
+            # --- Timeline: Alle Konzerte (initial letzte 6 Monate) ---
+            st.subheader("Timeline: Alle Konzerte")
+            timeline_df = grouped_df.copy()  # Alle Konzerte, nicht gefiltert
+            
+            if timeline_df.empty:
+                st.info("Keine Konzerte verfügbar.")
+            else:
+                # Prepare display fields
+                timeline_df['artists_str'] = timeline_df['artists'].apply(lambda x: ", ".join(x) if isinstance(x, (list, tuple)) else (str(x) if pd.notna(x) else ""))
+                timeline_df['artist_count'] = timeline_df['artists'].apply(lambda x: len(x) if isinstance(x, (list, tuple)) else 1)
+                timeline_df['date_label'] = timeline_df['event_date'].dt.strftime('%d.%m.%Y')
+                timeline_df['y_pos'] = 0.3  # Balken in der unteren Hälfte
+                timeline_df['y_label'] = 0.33  # Labels näher an Balken
+
+                # Calculate domain for x-axis: show last 6 months initially
+                six_months_ago = pd.Timestamp.now() - pd.DateOffset(months=6)
+                x_scale_domain = [six_months_ago, pd.Timestamp.now()]
+
+                # Build Altair timeline: bars with integrated labels (horizontal scroll only)
+                bars = alt.Chart(timeline_df).mark_bar(size=10).encode(
+                    x=alt.X('event_date:T', title='Datum', scale=alt.Scale(domain=x_scale_domain), axis=alt.Axis(format='%d.%m.%Y', labelAngle=0, tickCount='week', grid=True)),
+                    y=alt.value(150),
+                    color=alt.value('#1f77b4'),
+                    tooltip=[
+                        alt.Tooltip('event_date:T', title='Datum'),
+                        alt.Tooltip('artists_str:N', title='Künstler'),
+                        alt.Tooltip('location:N', title='Location'),
+                        alt.Tooltip('setlist:N', title='Setlist')
+                    ]
+                )
+
+                # Labels above bars (artists), rotated 45 degrees to the right
+                labels = alt.Chart(timeline_df).mark_text(align='left', baseline='middle', color='#1f77b4', fontSize=14, fontWeight='bold', dy=-15, dx=5).encode(
+                    x=alt.X('event_date:T', title='Datum', scale=alt.Scale(domain=x_scale_domain)),
+                    y=alt.value(150),
+                    text=alt.Text('artists_str:N'),
+                    angle=alt.value(-45)
+                )
+
+                chart = alt.layer(bars, labels).properties(height=350).interactive()
+
+                st.altair_chart(chart, use_container_width=True)
+
+            # --- Map: Concert Locations ---
+            st.subheader("Karte")
+            
+            # Group by city and get lat/long and count
+            city_map_data = grouped_df.groupby('city_name').agg({
+                'city_lat': 'first',
+                'city_long': 'first'
+            }).reset_index()
+            
+            # Count events per city from grouped_df
+            city_counts = grouped_df.groupby('city_name').size().reset_index(name='count')
+            city_map_data = city_map_data.merge(city_counts, on='city_name', how='left')
+            
+            # Prepare data for map: rename to latitude/longitude for st.map()
+            map_data = city_map_data.rename(columns={
+                'city_lat': 'latitude',
+                'city_long': 'longitude',
+                'count': 'size'
+            })
+            
+            # Scale the size for better visualization (multiply by a factor)
+            map_data['size'] = map_data['size'] * 50
+            
+            if not map_data.empty:
+                st.map(map_data, size='size', color='#FF6B6B')
+            else:
+                st.info("Keine Koordinaten verfügbar für die Karte.")

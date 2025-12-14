@@ -63,7 +63,9 @@ def upsert_setlists(setlists):
         country = setlist.get("venue", {}).get("city", {}).get("country", {}).get("name")
         date_str = setlist.get("eventDate")
         url = setlist.get("url")
-
+        city_lat = setlist.get("venue", {}).get("city", {}).get("coords", {}).get("lat")
+        city_long = setlist.get("venue", {}).get("city", {}).get("coords", {}).get("long")
+        
         try:
             event_date = datetime.strptime(date_str, "%d-%m-%Y").date().isoformat()
         except:
@@ -74,6 +76,8 @@ def upsert_setlists(setlists):
             "artist_name": artist,
             "venue_name": venue,
             "city_name": city,
+            "city_lat": city_lat,
+            "city_long": city_long,
             "country_name": country,
             "event_date": event_date,
             "url": url,
