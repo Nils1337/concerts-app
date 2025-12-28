@@ -4,6 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import time
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -47,6 +48,52 @@ def fetch_all_setlists():
         time.sleep(1)
 
     return results
+
+
+def fetch_upcoming_concerts():
+    response = requests.get(f"https://setlist.fm/attended/{USERNAME}")
+    if response.status_code != 200:
+        print(f"Error fetching upcoming setlists: {response.text}")
+        return []
+    soup = BeautifulSoup(response.text, 'html.parser')
+    upcoming = []
+
+    upcoming_div = soup.find('div', class_='userAttendancesAndNote')
+    setlist_el = upcoming_div.find_all('li', class_='setlist')
+    
+    for el in setlist_el:
+        artist = el.find('div', class_='content').find('a').find('strong').string
+        
+        location_string = el.find('div', class_='content').find('span', class_='subline').find('span').string
+        location_parts = [part.strip() for part in location_string.split(',')]
+        venue = location_parts[0] if len(location_parts) > 0 else None
+        city = location_parts[1] if len(location_parts) > 1 else None
+        country = location_parts[2] if len(location_parts) > 2 else None
+        href = el.find('div', class_='content').find('a')['href']
+        url = "https://setlist.fm" + href.lstrip('.')
+
+        for i, value in enumerate(el.find('span', class_='smallDateBlock').stripped_strings):
+            if (i == 0):
+                month = value
+            elif (i == 1):
+                day = value
+            elif (i == 2):
+                year = value
+
+        date_str = f"{day} {month} {year}"
+        date = datetime.strptime(date_str, "%d %b %Y").date()
+
+        payload = {
+            "artist_name": artist,
+            "venue_name": venue,
+            "city_name": city,
+            "country_name": country,
+            "event_date": date.isoformat(),
+            "url": url,
+        }
+        upcoming.append(payload)
+
+    return upcoming
 
 
 def upsert_setlists(setlists):
@@ -109,9 +156,33 @@ def upsert_setlists(setlists):
             print(f"Exception deleting {setlist_id}: {e}")
 
 
+def upsert_upcoming_concerts(upcoming_concerts):
+    try:
+        supabase.table("Upcoming").delete().neq("id", 0).execute()
+    except Exception as e:
+        print(f"Exception deleting existing upcoming concerts: {e}")
+
+    i = 0
+    for upcoming in upcoming_concerts:
+        try:
+            supabase.table("Upcoming").insert(upcoming).execute()
+            i += 1
+        except Exception as e:
+            print(f"Exception for {upcoming}: {e}")
+    
+    print(f"Inserted {i} upcoming concerts.")
+
+
+
 if __name__ == "__main__":
     print("Fetching setlists...")
-    all_setlists = fetch_all_setlists()
-    print(f"Found {len(all_setlists)} setlists.")
-    upsert_setlists(all_setlists)
+    # all_setlists = fetch_all_setlists()
+    # print(f"Found {len(all_setlists)} setlists.")
+    # upsert_setlists(all_setlists)
+
+    print("Fetching upcoming concerts...")
+    upcoming_concerts = fetch_upcoming_concerts()
+    print(f"Found {len(upcoming_concerts)} upcoming concerts.")
+    upsert_upcoming_concerts(upcoming_concerts)
+
     print("Done.")
