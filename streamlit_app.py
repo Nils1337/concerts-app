@@ -3,10 +3,22 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 from supabase import create_client, Client
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_API_KEY"]  # sicher für private App
+SPOTIFY_CLIENT_ID = os.environ["SPOTIFY_CLIENT_ID"]
+SPOTIFY_CLIENT_SECRET = os.environ["SPOTIFY_CLIENT_SECRET"]
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+    client_id=SPOTIFY_CLIENT_ID,
+    client_secret=SPOTIFY_CLIENT_SECRET
+))
 
 
 # --- Streamlit layout ---

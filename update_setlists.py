@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import time
 from bs4 import BeautifulSoup
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
 load_dotenv()
 
@@ -12,6 +14,8 @@ SETLIST_API_KEY = os.environ["SETLISTFM_API_KEY"]
 USERNAME = os.environ["SETLISTFM_USERNAME"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_API_KEY"]
+SPOTIFY_CLIENT_ID = os.environ["SPOTIFY_CLIENT_ID"]
+SPOTIFY_CLIENT_SECRET = os.environ["SPOTIFY_CLIENT_SECRET"]
 
 SETLIST_HEADERS = {
     "x-api-key": SETLIST_API_KEY,
@@ -19,6 +23,12 @@ SETLIST_HEADERS = {
 }
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+    client_id=SPOTIFY_CLIENT_ID,
+    client_secret=SPOTIFY_CLIENT_SECRET
+))
+
 
 def fetch_all_setlists():
     """Fetches all 'attended' setlists using pagination."""
@@ -123,6 +133,15 @@ def upsert_setlists(setlists):
         except:
             event_date = None
 
+
+        # Artist in Spotify suchen
+        results = sp.search(q='artist:' + artist, type='artist', limit=1)
+
+        if results['artists']['items']:
+            sp_artist = results['artists']['items'][0]
+            spotify_id = sp_artist['id']
+            spotify_url = sp_artist['external_urls']['spotify']
+
         payload = {
             "id": setlist_id,
             "artist_name": artist,
@@ -133,7 +152,9 @@ def upsert_setlists(setlists):
             "country_name": country,
             "event_date": event_date,
             "url": url,
-            "raw": setlist
+            "raw": setlist,
+            "spotify_id": spotify_id,
+            "spotify_url": spotify_url,
         }
 
         # Delete existing record and insert new one to keep data exactly in sync
@@ -170,6 +191,17 @@ def upsert_upcoming_concerts(upcoming_concerts):
     i = 0
     for upcoming in upcoming_concerts:
         try:
+            # Artist in Spotify suchen
+            results = sp.search(q='artist:' + upcoming["artist_name"], type='artist', limit=1)
+
+            if results['artists']['items']:
+                sp_artist = results['artists']['items'][0]
+                spotify_id = sp_artist['id']
+                spotify_url = sp_artist['external_urls']['spotify']
+
+            upcoming["spotify_id"] = spotify_id
+            upcoming["spotify_url"] = spotify_url
+
             supabase.table("Upcoming").insert(upcoming).execute()
             i += 1
         except Exception as e:
