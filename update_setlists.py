@@ -113,6 +113,11 @@ def upsert_setlists(setlists):
         city_lat = setlist.get("venue", {}).get("city", {}).get("coords", {}).get("lat")
         city_long = setlist.get("venue", {}).get("city", {}).get("coords", {}).get("long")
         
+        # fix wrong coords for Oberhausen
+        if city == "Oberhausen":
+            city_lat = 51.47
+            city_long = 6.85
+
         try:
             event_date = datetime.strptime(date_str, "%d-%m-%Y").date().isoformat()
         except:
