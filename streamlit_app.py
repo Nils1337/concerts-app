@@ -18,7 +18,12 @@ def get_setlists():
     response = supabase.table("Setlist").select("*").execute()
     return pd.DataFrame(response.data)
 
+def get_upcoming():
+    response = supabase.table("Upcoming").select("*").execute()
+    return pd.DataFrame(response.data)
+
 df = get_setlists()
+upcoming_raw = get_upcoming()
 
 if df.empty:
     st.info("Keine Setlists gefunden")
@@ -64,21 +69,24 @@ else:
             for (event_date, venue_name, city_name, city_lat, city_long, country_name), group in filtered.groupby(['event_date', 'venue_name', 'city_name', 'city_lat', 'city_long', 'country_name']):
                 # Separate artist names and create links
                 artists = []
-                url = group['url'].iloc[0] if 'url' in group.columns and not group['url'].isna().all() else None
+                urls = []
                 for _, row in group.iterrows():
                     artist = row.get('artist_name')
                     if artist:
                         artists.append(artist)
+                    url = row.get('url')
+                    if url:
+                        urls.append(url) 
 
                 grouped_data.append({
                     'event_date': event_date,
                     'artists': artists,
+                    'urls': urls,
                     'venue_name': venue_name,
                     'city_name': city_name,
                     'city_lat': city_lat,
                     'city_long': city_long,
-                    'country_name': country_name,
-                    'setlist': url
+                    'country_name': country_name
                 })
 
             grouped_df = pd.DataFrame(grouped_data).sort_values("event_date", ascending=False)
@@ -87,7 +95,7 @@ else:
 
             # --- Latest Concert and Latest First-Time Artist ---
             st.subheader("Highlights")
-            col_latest_concert, col_latest_artist = st.columns(2)
+            col_latest_concert, col_latest_artist, col_next_concert = st.columns(3)
 
             # Latest concert
             with col_latest_concert:
@@ -116,6 +124,34 @@ else:
                         st.write(f"📍 {location_str}")
                 else:
                     st.info("Alle Künstler wurden bereits besucht.")
+            
+            # Next upcoming concert
+            with col_next_concert:
+                if not upcoming_raw.empty:
+                    upcoming_raw['event_date'] = pd.to_datetime(upcoming_raw['event_date'], errors='coerce')
+                    upcoming_temp = upcoming_raw.sort_values('event_date', ascending=True)
+                    
+                    # Group to get the next concert
+                    next_event_date = upcoming_temp.iloc[0]['event_date']
+                    next_venue = upcoming_temp.iloc[0]['venue_name']
+                    next_city = upcoming_temp.iloc[0]['city_name']
+                    next_country = upcoming_temp.iloc[0]['country_name']
+                    
+                    # Get all artists for this event
+                    next_artists = upcoming_temp[
+                        (upcoming_temp['event_date'] == next_event_date) & 
+                        (upcoming_temp['venue_name'] == next_venue)
+                    ]['artist_name'].tolist()
+                    
+                    date_str_next = pd.to_datetime(next_event_date).strftime("%d.%m.%Y")
+                    artists_str_next = ", ".join(next_artists)
+                    location_str_next = f"{next_venue}, {next_city}, {next_country}"
+                    
+                    st.markdown("<div style='font-size:14px; color:#888; margin-bottom:4px;'>Nächstes Konzert</div><div style='font-size:22px; font-weight:bold; margin-bottom:12px;'>{}</div>".format(artists_str_next), unsafe_allow_html=True)
+                    st.write(f"📅 {date_str_next}")
+                    st.write(f"📍 {location_str_next}")
+                else:
+                    st.info("Alle Künstler wurden bereits besucht.")
 
             col_all_concerts, col_upcoming_concerts = st.columns(2)
 
@@ -124,23 +160,121 @@ else:
                 st.subheader("Vergangene Konzerte")
                 # Use grouped events (one row per date+location) for counts
                 st.write(f"{len(grouped_df)} vergangene Konzerte")
-                st.dataframe(grouped_df[['event_date', 'artists', 'location', 'setlist']], column_config={
-                    "event_date": st.column_config.DateColumn("Date", format="localized", width="small"),
-                    "artists": st.column_config.ListColumn("Artists", width="medium"),
-                    "location": "Location",
-                    "setlist": st.column_config.LinkColumn("Setlist", width="medium", display_text="Link"),
-                }, hide_index=True, use_container_width=True, height=600)
+            
+                html = "<div style='height: 600px; overflow-y: auto; border: 1px solid #25282d; border-radius: 8px; padding: 12px;'>"
+                html += "<style>a { color: #1f77b4; text-decoration: none; } a:visited { color: #1f77b4; } a:hover { text-decoration: underline; }</style>"
 
-            # Upcoming concerts table (empty for now)
+                for _, row in grouped_df.iterrows():
+                    event_date = pd.to_datetime(row['event_date'])
+                    month = event_date.strftime("%b").upper()
+                    day = event_date.strftime("%d")
+                    year = event_date.strftime("%Y")
+                    
+                    # Create artist links
+                    artists = row['artists'] if isinstance(row['artists'], (list, tuple)) else [row['artists']]
+                    urls = row['urls'] if isinstance(row['urls'], (list, tuple)) else []
+                    artist_links = []
+                    for i, artist in enumerate(artists):
+                        if i < len(urls) and pd.notna(urls[i]):
+                            artist_links.append(f"<a href='{urls[i]}' target='_blank'>{artist}</a>")
+                        else:
+                            artist_links.append(str(artist))
+                    artists_str = ", ".join(artist_links)
+                    
+                    location_str = f"{row['venue_name']}, {row['city_name']}, {row['country_name']}"
+
+                    html += f"""
+                    <div style='display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #25282d;'>
+                        <div style='text-align: center; margin-right: 16px; min-width: 45px;'>
+                            <div style='color: #888; font-size: 10px;'>{month}</div>
+                            <div style='font-size: 20px; font-weight: bold;'>{day}</div>
+                            <div style='color: #888; font-size: 10px;'>{year}</div>
+                        </div>
+                        <div style='flex: 1;'>
+                            <div style='font-size: 15px; font-weight: bold; margin-bottom: 2px;'>{artists_str}</div>
+                            <div style='color: #888; font-size: 13px;'>{location_str}</div>
+                        </div>
+                    </div>
+                    """
+
+                html += "</div>"
+
+                st.html(html)
+
+            # Upcoming concerts table
             with col_upcoming_concerts:
                 st.subheader("Kommende Konzerte")
-                upcoming_df = pd.DataFrame(columns=['event_date', 'artists', 'location'])
-                st.write(f"{len(upcoming_df)} kommende Konzerte")
-                st.dataframe(upcoming_df, column_config={
-                    "event_date": st.column_config.DateColumn("Date", format="localized", width="small"),
-                    "artists": st.column_config.ListColumn("Artists", width="medium"),
-                    "location": "Location",
-                }, hide_index=True, use_container_width=True, height=600)
+                
+                # Process upcoming concerts data
+                if upcoming_raw.empty:
+                    st.write("0 kommende Konzerte")
+                    st.info("Keine kommenden Konzerte geplant.")
+                else:
+                    upcoming_raw['event_date'] = pd.to_datetime(upcoming_raw['event_date'], errors='coerce')
+                    
+                    # Group by date and location
+                    upcoming_grouped_data = []
+                    for (event_date, venue_name, city_name, country_name), group in upcoming_raw.groupby(['event_date', 'venue_name', 'city_name', 'country_name']):
+                        artists = []
+                        urls = []
+                        for _, row in group.iterrows():
+                            artist = row.get('artist_name')
+                            if artist:
+                                artists.append(artist)
+                            url = row.get('url')
+                            if url:
+                                urls.append(url)
+                        
+                        upcoming_grouped_data.append({
+                            'event_date': event_date,
+                            'artists': artists,
+                            'urls': urls,
+                            'venue_name': venue_name,
+                            'city_name': city_name,
+                            'country_name': country_name
+                        })
+                    
+                    upcoming_df = pd.DataFrame(upcoming_grouped_data).sort_values("event_date", ascending=True)
+                    st.write(f"{len(upcoming_df)} kommende Konzerte")
+                    
+                    html = "<div style='height: 600px; overflow-y: auto; border: 1px solid #25282d; border-radius: 8px; padding: 12px;'>"
+                    html += "<style>a { color: #1f77b4; text-decoration: none; } a:visited { color: #1f77b4; } a:hover { text-decoration: underline; }</style>"
+
+                    for _, row in upcoming_df.iterrows():
+                        event_date = pd.to_datetime(row['event_date'])
+                        month = event_date.strftime("%b").upper()
+                        day = event_date.strftime("%d")
+                        year = event_date.strftime("%Y")
+                        
+                        # Create artist links
+                        artists = row['artists'] if isinstance(row['artists'], (list, tuple)) else [row['artists']]
+                        urls = row['urls'] if isinstance(row['urls'], (list, tuple)) else []
+                        artist_links = []
+                        for i, artist in enumerate(artists):
+                            if i < len(urls) and pd.notna(urls[i]):
+                                artist_links.append(f"<a href='{urls[i]}' target='_blank'>{artist}</a>")
+                            else:
+                                artist_links.append(str(artist))
+                        artists_str = ", ".join(artist_links)
+                        
+                        location_str = f"{row['venue_name']}, {row['city_name']}, {row['country_name']}"
+
+                        html += f"""
+                        <div style='display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #25282d;'>
+                            <div style='text-align: center; margin-right: 16px; min-width: 45px;'>
+                                <div style='color: #888; font-size: 10px;'>{month}</div>
+                                <div style='font-size: 20px; font-weight: bold;'>{day}</div>
+                                <div style='color: #888; font-size: 10px;'>{year}</div>
+                            </div>
+                            <div style='flex: 1;'>
+                                <div style='font-size: 15px; font-weight: bold; margin-bottom: 2px;'>{artists_str}</div>
+                                <div style='color: #888; font-size: 13px;'>{location_str}</div>
+                            </div>
+                        </div>
+                        """
+
+                    html += "</div>"
+                    st.html(html)
 
             col1, col2 = st.columns([1, 1])
             with col1:

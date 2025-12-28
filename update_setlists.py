@@ -176,9 +176,9 @@ def upsert_upcoming_concerts(upcoming_concerts):
 
 if __name__ == "__main__":
     print("Fetching setlists...")
-    # all_setlists = fetch_all_setlists()
-    # print(f"Found {len(all_setlists)} setlists.")
-    # upsert_setlists(all_setlists)
+    all_setlists = fetch_all_setlists()
+    print(f"Found {len(all_setlists)} setlists.")
+    upsert_setlists(all_setlists)
 
     print("Fetching upcoming concerts...")
     upcoming_concerts = fetch_upcoming_concerts()
