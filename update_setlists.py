@@ -40,8 +40,7 @@ def fetch_all_setlists():
         r = requests.get(url, headers=SETLIST_HEADERS)
 
         if r.status_code != 200:
-            print(f"Error fetching page {page}: {r.text}")
-            break
+            raise Exception(f"Error fetching setlists: {r.text}")
 
         data = r.json()
         setlists = data.get("setlist", [])
@@ -63,8 +62,7 @@ def fetch_all_setlists():
 def fetch_upcoming_concerts():
     response = requests.get(f"https://setlist.fm/attended/{USERNAME}")
     if response.status_code != 200:
-        print(f"Error fetching upcoming setlists: {response.text}")
-        return []
+        raise Exception(f"Error fetching upcoming concerts: {response.text}")
     soup = BeautifulSoup(response.text, 'html.parser')
     upcoming = []
 
